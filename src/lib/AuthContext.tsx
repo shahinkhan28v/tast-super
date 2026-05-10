@@ -136,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (err.code === 'auth/popup-blocked') {
         throw new Error('Popup blocked by browser. Please enable popups for this site.');
       } else if (err.code === 'auth/unauthorized-domain') {
-        throw new Error('This domain is not authorized for login. Please check Firebase Console.');
+        throw new Error(`This domain (${window.location.hostname}) is not authorized. Please add "${window.location.hostname}" to "Authorized domains" in Firebase Console > Authentication > Settings.`);
       } else {
         throw err;
       }
