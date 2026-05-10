@@ -45,8 +45,8 @@ export default function AdminDashboard() {
         }).reverse();
 
         const dailyData = last7Days.map(date => {
-          const joined = users?.filter(u => u.joinedAt.startsWith(date)).length || 0;
-          const withdrawn = withdrawals?.filter(w => w.timestamp.startsWith(date) && w.status === 'approved')
+          const joined = (users as any[])?.filter(u => u.joinedAt?.startsWith(date)).length || 0;
+          const withdrawn = (withdrawals as any[])?.filter(w => w.timestamp?.startsWith(date) && w.status === 'approved')
             .reduce((acc, curr) => acc + curr.amount, 0) || 0;
           return {
             name: date.split('-').slice(1).join('/'),

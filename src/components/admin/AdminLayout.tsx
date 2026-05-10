@@ -16,7 +16,7 @@ export default function AdminLayout() {
   const roleLabel = profile?.role === 'super_admin' ? 'Super Admin' : (profile?.role === 'admin' ? 'Administrator' : 'Moderator');
 
   return (
-    <div className="flex h-screen bg-slate-50 font-sans text-slate-800 overflow-hidden">
+    <div className="flex h-[100dvh] bg-slate-50 font-sans text-slate-800 overflow-hidden">
       <AdminSidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
       
       <main className="flex-1 flex flex-col min-w-0 relative">

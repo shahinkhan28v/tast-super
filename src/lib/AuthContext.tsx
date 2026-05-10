@@ -103,24 +103,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
 
           // Start profile listener
-          unsubProfile = onSnapshot(userRef, (doc) => {
-            if (doc.exists()) {
-              setProfile(doc.data() as UserProfile);
+          unsubProfile = onSnapshot(userRef, (snapshot) => {
+            if (snapshot.exists()) {
+              setProfile(snapshot.data() as UserProfile);
             }
-          }, (err) => console.error("Profile snapshot error:", err));
+            setLoading(false);
+          }, (err) => {
+            console.error("Profile snapshot error:", err);
+            setLoading(false);
+          });
         } else {
           setProfile(null);
+          setLoading(false);
         }
       } catch (err) {
         console.error("Auth sync error:", err);
-      } finally {
         setLoading(false);
       }
     });
 
     return () => {
       unsubscribe();
-      if (unsubProfile) unsubProfile();
+      if (unsubProfile) (unsubProfile as any)();
     };
   }, []);
 
