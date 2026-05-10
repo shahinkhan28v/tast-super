@@ -880,10 +880,11 @@ async function addCommission(referrerId: string, taskName: string, points: numbe
   try {
     const earning: EarningLog = {
       userId: referrerId,
-      taskName: `Commission from ${sourceUserId.substring(0, 5)}: ${points} pts`,
+      taskName, // Simplified task name
       points,
       timestamp: new Date().toISOString(),
-      type: 'referral'
+      type: 'referral',
+      sourceUserId
     };
     
     await addDoc(collection(db, 'earnings'), earning);
@@ -896,5 +897,34 @@ async function addCommission(referrerId: string, taskName: string, points: numbe
     });
   } catch (e) {
     console.error("Add Commission Error:", e);
+  }
+}
+
+export async function getReferralsWithStats(userId: string) {
+  try {
+    // 1. Get all users referred by this user
+    const q = query(collection(db, 'users'), where('referredBy', '==', userId), orderBy('joinedAt', 'desc'));
+    const snap = await getDocs(q);
+    const referrals = snap.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile));
+
+    // 2. Get earnings from these referrals
+    const eq = query(collection(db, 'earnings'), where('userId', '==', userId), where('type', '==', 'referral'));
+    const esnap = await getDocs(eq);
+    const earnings = esnap.docs.map(doc => doc.data() as EarningLog);
+
+    // 3. Map stats to referrals
+    return referrals.map(ref => {
+      const earnedFromUser = earnings
+        .filter(e => e.sourceUserId === ref.uid)
+        .reduce((sum, curr) => sum + curr.points, 0);
+      
+      return {
+        ...ref,
+        earnedFromUser
+      };
+    });
+  } catch (error) {
+    console.error("Error fetching referrals with stats:", error);
+    return [];
   }
 }

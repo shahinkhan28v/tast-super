@@ -147,6 +147,7 @@ export interface EarningLog {
   points: number;
   timestamp: string;
   type: EarningType;
+  sourceUserId?: string; // UID of the user who generated this commission
 }
 
 export type WithdrawalStatus = 'pending' | 'approved' | 'rejected';
