@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Outlet, NavLink, useNavigate, Link } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, Link, useLocation } from 'react-router-dom';
 import { 
   Menu, 
   X, 
@@ -15,17 +15,22 @@ import {
   LogOut,
   HelpCircle,
   FileText,
-  ShieldCheck
+  ShieldCheck,
+  ChevronLeft
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import BackButton from './BackButton';
 
 export default function Layout() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const { user, profile, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const isHome = location.pathname === '/';
 
   const menuItems = [
     { name: 'Home', icon: Home, path: '/' },
@@ -46,12 +51,23 @@ export default function Layout() {
       {/* Header */}
       <header className="bg-indigo-700 h-14 flex items-center justify-between px-6 shadow-md sticky top-0 z-40 shrink-0">
         <div className="flex items-center gap-4 text-white">
-          <button 
-            onClick={() => setIsMenuOpen(true)}
-            className="p-2 hover:bg-indigo-600 rounded-md transition-colors"
-          >
-            <Menu className="w-6 h-6" />
-          </button>
+          {!isHome ? (
+            <button 
+              onClick={() => navigate(-1)}
+              className="p-2 hover:bg-indigo-600 rounded-md transition-colors flex items-center gap-1"
+              id="header-back-button"
+            >
+              <ChevronLeft className="w-6 h-6" />
+            </button>
+          ) : (
+            <button 
+              onClick={() => setIsMenuOpen(true)}
+              className="p-2 hover:bg-indigo-600 rounded-md transition-colors"
+              id="header-menu-button"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+          )}
           <span className="font-bold text-xl tracking-tight">PointHub</span>
         </div>
 

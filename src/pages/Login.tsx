@@ -26,8 +26,8 @@ export default function Login() {
     try {
       await signIn();
       navigate('/');
-    } catch (err) {
-      setError('Failed to sign in. Please try again.');
+    } catch (err: any) {
+      setError(err.message || 'Failed to sign in. Please try again.');
     }
   };
 

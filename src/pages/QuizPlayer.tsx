@@ -147,12 +147,7 @@ export default function QuizPlayer() {
     <div className="min-h-screen py-8 space-y-8 flex flex-col">
        {/* Header */}
        <div className="flex items-center justify-between px-2 shrink-0">
-          <button 
-            onClick={() => navigate('/quizzes')}
-            className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-colors"
-          >
-             <ArrowLeft className="w-5 h-5" />
-          </button>
+          <div className="w-10 h-10"></div>
           <div className="text-center">
              <h2 className="text-sm font-black text-slate-800 tracking-tight">{quiz.title}</h2>
              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Knowledge Burst</p>

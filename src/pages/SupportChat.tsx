@@ -109,12 +109,6 @@ export default function SupportChatPage() {
       {/* Header */}
       <header className="bg-white border-b border-slate-200 p-4 flex items-center justify-between sticky top-0 z-30">
         <div className="flex items-center gap-3">
-          <button 
-            onClick={() => navigate(-1)}
-            className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 hover:text-indigo-600 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
           <div>
             <h1 className="text-lg font-black text-slate-900 tracking-tight leading-none">Support Center</h1>
             <div className="flex items-center gap-1.5 mt-1">

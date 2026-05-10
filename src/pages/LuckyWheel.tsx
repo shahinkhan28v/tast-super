@@ -152,9 +152,7 @@ export default function LuckyWheel() {
     <div className="space-y-8 pb-32">
        {/* Header */}
        <div className="flex items-center justify-between px-2">
-          <button onClick={() => navigate(-1)} className="w-10 h-10 rounded-xl bg-white border border-slate-100 flex items-center justify-center text-slate-400">
-             <ArrowLeft className="w-5 h-5" />
-          </button>
+          <div className="w-10 h-10"></div>
           <div className="text-center">
              <h1 className="text-xl font-black text-slate-800 tracking-tight">Lucky Wheel</h1>
              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">Spin to win rewards</p>

@@ -1,11 +1,16 @@
 import React from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import AdminSidebar from './AdminSidebar';
-import { Search, Bell, User } from 'lucide-react';
+import { Search, Bell, User, ChevronLeft } from 'lucide-react';
 import { useAuth } from '../../lib/AuthContext';
+import BackButton from '../BackButton';
 
 export default function AdminLayout() {
   const { profile } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  const isDashboard = location.pathname === '/admin' || location.pathname === '/admin/';
 
   const roleLabel = profile?.role === 'super_admin' ? 'Super Admin' : (profile?.role === 'admin' ? 'Administrator' : 'Moderator');
 
@@ -17,6 +22,16 @@ export default function AdminLayout() {
         {/* Top Header */}
         <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-8 sticky top-0 z-40 shrink-0">
           <div className="flex items-center gap-4 flex-1">
+            {!isDashboard && (
+              <button 
+                onClick={() => navigate(-1)}
+                className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 hover:text-indigo-600 transition-all flex items-center gap-2 mr-2"
+                id="admin-back-button"
+              >
+                <ChevronLeft size={20} />
+                <span className="text-xs font-bold uppercase tracking-wider">Back</span>
+              </button>
+            )}
             <div className="relative w-64 group">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
               <input 
