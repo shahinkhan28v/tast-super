@@ -1,0 +1,137 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      // Hardcoded super admin + admins collection lookup
+      return isSignedIn() && (
+        request.auth.token.email == 'shahinkhan28v@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+    
+    function hasPermission(perm) {
+      return isSignedIn() && (
+        request.auth.token.email == 'shahinkhan28v@gmail.com' ||
+        (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) && (
+          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'super_admin' ||
+          (get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.permissions != null && 
+           get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.permissions.hasAny([perm]))
+        ))
+      );
+    }
+
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+
+    // --- Validation Blueprints ---
+    function isValidUser(data) {
+      return data.uid == request.auth.uid && 
+             data.email is string &&
+             data.points is number &&
+             data.points >= 0 &&
+             data.totalEarnings is number &&
+             data.totalEarnings >= 0;
+    }
+
+    // --- Match Rules ---
+
+    // Admins Collection
+    match /admins/{adminId} {
+      allow read: if isSignedIn();
+      allow write: if request.auth.token.email == 'shahinkhan28v@gmail.com';
+    }
+
+    // Global Settings
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if hasPermission('manage_settings');
+    }
+
+    // User Profiles
+    match /users/{userId} {
+      allow get: if isOwner(userId) || hasPermission('manage_users');
+      allow list: if hasPermission('manage_users');
+      allow create: if isOwner(userId) && isValidUser(incoming());
+      allow update: if (isOwner(userId) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['points', 'totalEarnings', 'profilePic', 'paymentInfo', 'streak', 'lastCheckIn', 'spins']) &&
+        incoming().uid == existing().uid &&
+        incoming().email == existing().email &&
+        incoming().role == existing().role
+      )) || hasPermission('manage_users');
+    }
+
+    // Earnings History
+    match /earnings/{earningId} {
+      allow get: if (isSignedIn() && existing().userId == request.auth.uid) || hasPermission('manage_users');
+      allow list: if (isSignedIn() && resource.data.userId == request.auth.uid) || hasPermission('manage_users');
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && incoming().points >= 0;
+    }
+
+    // Withdrawal Requests
+    match /withdrawals/{withdrawalId} {
+      allow get: if (isSignedIn() && existing().userId == request.auth.uid) || hasPermission('manage_withdrawals');
+      allow list: if (isSignedIn() && resource.data.userId == request.auth.uid) || hasPermission('manage_withdrawals');
+      allow create: if isSignedIn() && incoming().userId == request.auth.uid && incoming().status == 'pending';
+      allow update: if hasPermission('manage_withdrawals') && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+      );
+    }
+
+    // Promotional Banners
+    match /banners/{bannerId} {
+      allow read: if true;
+      allow write: if hasPermission('manage_banners');
+    }
+
+    // Tasks Definitions
+    match /tasks/{taskId} {
+      allow read: if isSignedIn();
+      allow write: if hasPermission('manage_tasks');
+    }
+
+    // Quizzes Definitions
+    match /quizzes/{quizId} {
+      allow read: if isSignedIn();
+      allow write: if hasPermission('manage_tasks');
+    }
+
+    // User Specific Records
+    match /users/{userId}/quiz_attempts/{quizId} {
+      allow read: if isOwner(userId) || hasPermission('manage_users');
+      allow create, update: if isOwner(userId);
+    }
+
+    match /users/{userId}/tasks/{taskId} {
+      allow read: if isOwner(userId) || hasPermission('manage_tasks');
+      allow create, update: if isOwner(userId);
+    }
+
+    // Support Chats
+    match /support_chats/{chatId} {
+      allow get: if isOwner(chatId) || hasPermission('manage_support');
+      allow list: if (isSignedIn() && resource.data.userId == request.auth.uid) || hasPermission('manage_support');
+      allow create: if isOwner(chatId);
+      allow update: if isOwner(chatId) || hasPermission('manage_support');
+      
+      match /messages/{messageId} {
+        allow read: if isOwner(chatId) || hasPermission('manage_support');
+        allow create: if isOwner(chatId) || hasPermission('manage_support');
+      }
+    }
+  }
+}
