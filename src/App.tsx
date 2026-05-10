@@ -22,6 +22,7 @@ import AdminAdmins from './pages/admin/Admins';
 import AdminQuizzes from './pages/admin/Quizzes';
 import AdminLuckyWheel from './pages/admin/LuckyWheel';
 import AdminReferrals from './pages/admin/Referrals';
+import AdminIpDetection from './pages/admin/IpDetection';
 import Quizzes from './pages/Quizzes';
 import QuizPlayer from './pages/QuizPlayer';
 import LuckyWheel from './pages/LuckyWheel';
@@ -34,7 +35,7 @@ function ReferralTracker() {
   useEffect(() => {
     const ref = searchParams.get('ref');
     if (ref) {
-      sessionStorage.setItem('referralCode', ref);
+      sessionStorage.setItem('referralCode', ref.toUpperCase());
     }
   }, [searchParams]);
   
@@ -100,6 +101,7 @@ export default function App() {
               <Route path="support" element={<PermissionRoute permission="manage_support"><AdminSupport /></PermissionRoute>} />
               <Route path="settings" element={<PermissionRoute permission="manage_settings"><AdminSettings /></PermissionRoute>} />
               <Route path="referrals" element={<PermissionRoute permission="manage_settings"><AdminReferrals /></PermissionRoute>} />
+              <Route path="ip-detect" element={<PermissionRoute permission="manage_users"><AdminIpDetection /></PermissionRoute>} />
             </Route>
           </Route>
         </Routes>

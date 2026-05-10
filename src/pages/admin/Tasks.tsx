@@ -13,9 +13,10 @@ import {
   FileText,
   Smartphone,
   Eye,
-  EyeOff
+  EyeOff,
+  History
 } from 'lucide-react';
-import { getAllTasks, addTask, updateTask } from '../../lib/dataService';
+import { subscribeToAllTasks, addTask, updateTask, deleteTask } from '../../lib/dataService';
 import { Task, TaskType } from '../../types';
 import { cn } from '../../lib/utils';
 
@@ -23,6 +24,8 @@ export default function AdminTasks() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingTask, setEditingTask] = useState<Task | null>(null);
+  const [actionLoading, setActionLoading] = useState(false);
   const [newTask, setNewTask] = useState<Omit<Task, 'id'>>({
     title: '',
     description: '',
@@ -36,33 +39,87 @@ export default function AdminTasks() {
   });
 
   useEffect(() => {
-    async function load() {
-      const data = await getAllTasks();
-      if (data) setTasks(data);
+    const unsub = subscribeToAllTasks((data) => {
+      setTasks(data);
       setLoading(false);
-    }
-    load();
+    });
+    return () => unsub();
   }, []);
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    await addTask(newTask);
-    const data = await getAllTasks();
-    if (data) setTasks(data);
-    setShowAddModal(false);
+    setActionLoading(true);
+    try {
+      if (editingTask) {
+        await updateTask(editingTask.id!, newTask);
+      } else {
+        await addTask(newTask);
+      }
+      setShowAddModal(false);
+      setEditingTask(null);
+      setNewTask({
+        title: '',
+        description: '',
+        type: 'visit_website',
+        targetUrl: '',
+        requiredSeconds: 30,
+        rewardPoints: 50,
+        isActive: true,
+        category: 'General',
+        expiresAt: ''
+      });
+    } catch (error) {
+      console.error(error);
+      alert('Failed to save task');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleDeleteTask = async (id: string) => {
+    if (!window.confirm('Delete this task permanently?')) return;
+    try {
+      await deleteTask(id);
+    } catch (error) {
+      console.error(error);
+      alert('Failed to delete task');
+    }
+  };
+
+  const handleDeleteExpired = async () => {
+    const expired = tasks.filter(t => t.expiresAt && new Date(t.expiresAt) < new Date());
+    if (expired.length === 0) {
+      alert('No expired tasks found.');
+      return;
+    }
+    if (!window.confirm(`Delete all ${expired.length} expired tasks?`)) return;
+    
+    setActionLoading(true);
+    try {
+      await Promise.all(expired.map(t => deleteTask(t.id!)));
+      alert(`${expired.length} expired tasks deleted.`);
+    } catch (error) {
+      console.error(error);
+      alert('Some tasks could not be deleted');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleEditClick = (task: Task) => {
+    setEditingTask(task);
     setNewTask({
-      title: '',
-      description: '',
-      type: 'visit_website',
-      targetUrl: '',
-      requiredSeconds: 30,
-      rewardPoints: 50,
-      isActive: true,
-      category: 'General',
-      expiresAt: ''
+      title: task.title,
+      description: task.description,
+      type: task.type,
+      targetUrl: task.targetUrl,
+      requiredSeconds: task.requiredSeconds,
+      rewardPoints: task.rewardPoints,
+      isActive: task.isActive,
+      category: task.category,
+      expiresAt: task.expiresAt || ''
     });
-    setLoading(false);
+    setShowAddModal(true);
   };
 
   const handleToggleActive = async (task: Task) => {
@@ -95,13 +152,23 @@ export default function AdminTasks() {
           <h1 className="text-3xl font-black tracking-tight text-slate-900">Task Management</h1>
           <p className="text-slate-500 text-sm font-medium mt-1">Design rewarding experiences and verification loops</p>
         </div>
-        <button 
-          onClick={() => setShowAddModal(true)}
-          className="px-6 py-3 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 flex items-center gap-2 hover:bg-indigo-700 active:scale-95 transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          Create New Task
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={handleDeleteExpired}
+            disabled={actionLoading}
+            className="px-6 py-3 bg-white text-rose-600 border border-rose-100 rounded-2xl text-xs font-black uppercase tracking-widest shadow-sm flex items-center gap-2 hover:bg-rose-50 active:scale-95 transition-all disabled:opacity-50"
+          >
+            <History className="w-4 h-4" />
+            Cleanup Expired
+          </button>
+          <button 
+            onClick={() => setShowAddModal(true)}
+            className="px-6 py-3 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 flex items-center gap-2 hover:bg-indigo-700 active:scale-95 transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            Create New Task
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -153,10 +220,16 @@ export default function AdminTasks() {
                     {task.type.replace('_', ' ')}
                   </span>
                   <div className="flex gap-2">
-                    <button className="p-2 text-slate-400 hover:text-indigo-600 transition-colors">
+                    <button 
+                      onClick={() => handleEditClick(task)}
+                      className="p-2 text-slate-400 hover:text-indigo-600 transition-colors"
+                    >
                       <Edit2 className="w-4 h-4" />
                     </button>
-                    <button className="p-2 text-slate-400 hover:text-rose-500 transition-colors">
+                    <button 
+                      onClick={() => handleDeleteTask(task.id!)}
+                      className="p-2 text-slate-400 hover:text-rose-500 transition-colors"
+                    >
                       <Trash2 className="w-4 h-4" />
                     </button>
                   </div>
@@ -185,7 +258,10 @@ export default function AdminTasks() {
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Configure user actions and value</p>
               </div>
               <button 
-                onClick={() => setShowAddModal(false)} 
+                onClick={() => {
+                  setShowAddModal(false);
+                  setEditingTask(null);
+                }} 
                 className="w-10 h-10 rounded-full bg-white shadow-sm flex items-center justify-center text-slate-400 hover:text-slate-600 border border-slate-100"
               >
                 <X className="w-5 h-5" />
@@ -300,16 +376,21 @@ export default function AdminTasks() {
                <div className="flex gap-4 pt-4">
                   <button 
                     type="button"
-                    onClick={() => setShowAddModal(false)}
+                    onClick={() => {
+                      setShowAddModal(false);
+                      setEditingTask(null);
+                    }}
                     className="flex-1 py-4 border-2 border-slate-100 rounded-2xl text-xs font-black uppercase tracking-widest text-slate-500 hover:bg-slate-50 transition-all"
                   >
                     Discard
                   </button>
                   <button 
                     type="submit"
-                    className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all"
+                    disabled={actionLoading}
+                    className="flex-1 py-4 bg-indigo-600 text-white rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                   >
-                    Publish Task
+                    {actionLoading && <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />}
+                    {editingTask ? 'Update Task' : 'Publish Task'}
                   </button>
                </div>
             </form>

@@ -12,7 +12,9 @@ import {
   setDoc,
   limit,
   Timestamp,
-  serverTimestamp
+  serverTimestamp,
+  onSnapshot,
+  deleteDoc
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { handleFirestoreError, OperationType } from './firebaseUtils';
@@ -28,37 +30,52 @@ function clean(obj: any): any {
   return result;
 }
 
-export async function addEarnings(userId: string, taskName: string, points: number, type: EarningType) {
+export async function updateUserDeviceInfo(userId: string, data: { lastIp?: string, userAgent?: string, deviceInfo?: any }) {
+  try {
+    const userRef = doc(db, 'users', userId);
+    await updateDoc(userRef, clean(data));
+  } catch (error) {
+    console.error("Update Device Info Error:", error);
+  }
+}
+
+export async function addEarnings(userId: string, taskName: string, points: number, type: EarningType, sourceUserId?: string) {
   const earningPath = 'earnings';
   try {
-    const earning: EarningLog = {
-      userId,
-      taskName,
-      points,
-      timestamp: new Date().toISOString(),
-      type
-    };
-    
-    // 1. Add earning log
-    await addDoc(collection(db, earningPath), earning);
-    
-    // 2. Update user points
+    const numPoints = Math.max(0, Number(points));
+    if (isNaN(numPoints) || numPoints === 0) return;
+
     const userRef = doc(db, 'users', userId);
+    
+    // Update user points
     await updateDoc(userRef, {
-      points: increment(points),
-      totalEarnings: increment(points)
+      points: increment(numPoints),
+      totalEarnings: increment(numPoints)
     });
 
-    // 3. Distribute MLM Commission (skip if it was already a referral bonus to avoid loops)
-    if (type !== 'referral') {
-      await distributeMLMCommission(userId, points);
+    // Logging and MLM (secondary)
+    try {
+      await addDoc(collection(db, earningPath), {
+        userId,
+        taskName,
+        points: numPoints,
+        timestamp: new Date().toISOString(),
+        type,
+        sourceUserId
+      });
+      
+      if (type !== 'referral') {
+        distributeMLMCommission(userId, numPoints).catch(() => {});
+      }
+    } catch (e) {
+      console.warn("Log/MLM error:", e);
     }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, earningPath);
   }
 }
 
-export async function requestWithdrawal(userId: string, amount: number, currency: string, method: string, details: string) {
+export async function requestWithdrawal(userId: string, points: number, amount: number, currency: string, method: string, details: string) {
   const withdrawalPath = 'withdrawals';
   try {
     // Check if user has enough points
@@ -67,12 +84,14 @@ export async function requestWithdrawal(userId: string, amount: number, currency
     if (!userSnap.exists()) throw new Error('User not found');
     const userData = userSnap.data() as UserProfile;
     
-    if (userData.points < amount) {
+    if (userData.points < points) {
       throw new Error('Insufficient points');
     }
 
+    const numPoints = Number(points);
     const request: WithdrawalRequest = {
       userId,
+      points: numPoints,
       amount,
       currency,
       status: 'pending',
@@ -86,7 +105,7 @@ export async function requestWithdrawal(userId: string, amount: number, currency
     
     // 2. Deduct points
     await updateDoc(userRef, {
-      points: increment(-amount)
+      points: increment(-numPoints)
     });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, withdrawalPath);
@@ -121,6 +140,78 @@ export async function getUserWithdrawals(userId: string) {
   } catch (error) {
     handleFirestoreError(error, OperationType.LIST, path);
   }
+}
+
+export function subscribeToAppSettings(callback: (settings: AppSettings) => void) {
+  const path = 'settings';
+  const ref = doc(db, path, 'global');
+  return onSnapshot(ref, (snap) => {
+    if (snap.exists()) {
+      const data = snap.data() as AppSettings;
+      callback({
+        ...DEFAULT_SETTINGS,
+        ...data,
+        luckyWheel: {
+          ...DEFAULT_SETTINGS.luckyWheel,
+          ...(data.luckyWheel || {})
+        }
+      });
+    } else {
+      callback(DEFAULT_SETTINGS);
+    }
+  });
+}
+
+export function subscribeToUserEarnings(userId: string, callback: (earnings: EarningLog[]) => void) {
+  const path = 'earnings';
+  const q = query(
+    collection(db, path),
+    where('userId', '==', userId),
+    orderBy('timestamp', 'desc')
+  );
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as EarningLog)));
+  });
+}
+
+export function subscribeToUserWithdrawals(userId: string, callback: (withdrawals: WithdrawalRequest[]) => void) {
+  const path = 'withdrawals';
+  const q = query(
+    collection(db, path),
+    where('userId', '==', userId),
+    orderBy('timestamp', 'desc')
+  );
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as WithdrawalRequest)));
+  });
+}
+
+export function subscribeToAllUsers(callback: (users: UserProfile[]) => void) {
+  const q = query(collection(db, 'users'), orderBy('joinedAt', 'desc'));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map(doc => ({ uid: doc.id, ...doc.data() } as UserProfile)));
+  });
+}
+
+export function subscribeToAllWithdrawals(callback: (withdrawals: WithdrawalRequest[]) => void) {
+  const q = query(collection(db, 'withdrawals'), orderBy('timestamp', 'desc'));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as WithdrawalRequest)));
+  });
+}
+
+export function subscribeToSupportChats(callback: (chats: SupportChat[]) => void) {
+  const q = query(collection(db, 'support_chats'), orderBy('updatedAt', 'desc'));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as SupportChat)));
+  });
+}
+
+export function subscribeToChatMessages(chatId: string, callback: (messages: ChatMessage[]) => void) {
+  const q = query(collection(db, 'support_chats', chatId, 'messages'), orderBy('timestamp', 'asc'));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as ChatMessage)));
+  });
 }
 
 export async function processDailyCheckIn(userId: string) {
@@ -191,15 +282,16 @@ export async function updateWithdrawalStatus(id: string, status: 'approved' | 'r
     if (status === 'rejected') {
       // Return points to user
       const userRef = doc(db, 'users', withdrawal.userId);
+      const pointsToRefund = Number(withdrawal.points);
       await updateDoc(userRef, {
-        points: increment(withdrawal.amount)
+        points: increment(pointsToRefund)
       });
       
       // Add a refund log
       await addDoc(collection(db, 'earnings'), {
         userId: withdrawal.userId,
         taskName: 'Withdrawal Refunded',
-        points: withdrawal.amount,
+        points: pointsToRefund,
         timestamp: new Date().toISOString(),
         type: 'task'
       });
@@ -234,6 +326,8 @@ export async function getAppSettings(): Promise<AppSettings> {
 
 const DEFAULT_SETTINGS: AppSettings = {
   conversionRate: 100,
+  pointsPerUsd: 100,
+  pointsPerBdt: 1,
   minWithdrawal: 500,
   referralBonus: 500,
   dailyBonusBase: 50,
@@ -370,14 +464,21 @@ export async function deleteAdmin(id: string) {
         });
       }
     }
-    const { deleteDoc: fireDelete } = await import('firebase/firestore');
-    await fireDelete(ref);
+    await deleteDoc(ref);
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
   }
 }
 
 // --- Quiz Methods ---
+
+export function subscribeToAllQuizzes(callback: (quizzes: Quiz[]) => void) {
+  const path = 'quizzes';
+  const q = query(collection(db, path), orderBy('createdAt', 'desc'));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Quiz)));
+  });
+}
 
 export async function getAllQuizzes(onlyActive = false) {
   const path = 'quizzes';
@@ -412,8 +513,7 @@ export async function updateQuiz(id: string, quiz: Partial<Quiz>) {
 export async function deleteQuiz(id: string) {
   const path = 'quizzes';
   try {
-    const { deleteDoc: fireDelete } = await import('firebase/firestore');
-    await fireDelete(doc(db, path, id));
+    await deleteDoc(doc(db, path, id));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
   }
@@ -454,7 +554,7 @@ export async function submitQuizAttempt(userId: string, quiz: Quiz, score: numbe
     }
 
     if (pointsEarned > 0) {
-      await addEarnings(userId, `Completed quiz: ${quiz.title}`, pointsEarned, 'quiz');
+      await addEarnings(userId, `Completed quiz: ${quiz.title}`, Number(pointsEarned), 'quiz');
     }
     
     return attempt;
@@ -496,7 +596,7 @@ export async function useLuckySpin(userId: string) {
     });
 
     if (selectedSlice.value > 0) {
-      await addEarnings(userId, 'Lucky Wheel Win', selectedSlice.value, 'wheel');
+      await addEarnings(userId, 'Lucky Wheel Win', Number(selectedSlice.value), 'wheel');
     }
 
     return {
@@ -593,14 +693,21 @@ export async function incrementBannerClick(id: string) {
 export async function deleteBanner(id: string) {
   const path = 'banners';
   try {
-    const { deleteDoc: fireDelete } = await import('firebase/firestore');
-    await fireDelete(doc(db, path, id));
+    await deleteDoc(doc(db, path, id));
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
   }
 }
 
 // --- Task Methods ---
+
+export function subscribeToAllTasks(callback: (tasks: Task[]) => void) {
+  const path = 'tasks';
+  const q = query(collection(db, path), orderBy('category', 'asc'));
+  return onSnapshot(q, (snap) => {
+    callback(snap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Task)));
+  });
+}
 
 export async function getAllTasks(onlyActive = false) {
   const path = 'tasks';
@@ -632,6 +739,15 @@ export async function updateTask(id: string, task: Partial<Task>) {
     await updateDoc(ref, clean(task));
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, path);
+  }
+}
+
+export async function deleteTask(id: string) {
+  const path = 'tasks';
+  try {
+    await deleteDoc(doc(db, path, id));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
   }
 }
 
@@ -699,7 +815,7 @@ export async function verifyUserTask(userId: string, task: Task) {
     }
 
     // Add points
-    await addEarnings(userId, `Completed task: ${task.title}`, task.rewardPoints, 'task');
+    await addEarnings(userId, `Completed task: ${task.title}`, Number(task.rewardPoints), 'task');
 
     return { success: true, message: `Verified! +${task.rewardPoints} points` };
   } catch (error) {
@@ -786,52 +902,66 @@ export async function getSupportChats(): Promise<SupportChat[]> {
 
 // --- MLM Referral Logic ---
 
+export async function getUserIdByReferralCode(code: string): Promise<string | null> {
+  try {
+    const q = query(collection(db, 'users'), where('referralCode', '==', code.toUpperCase()), limit(1));
+    const snap = await getDocs(q);
+    if (snap.empty) return null;
+    return snap.docs[0].id;
+  } catch (error) {
+    console.error("Error finding user by referral code:", error);
+    return null;
+  }
+}
+
 export async function processReferralOnSignup(userId: string, referralCode: string) {
   try {
-    const q = query(collection(db, 'users'), where('referralCode', '==', referralCode), limit(1));
-    const snap = await getDocs(q);
-    if (snap.empty) return { success: false, message: 'Invalid referral code' };
+    const referrerId = await getUserIdByReferralCode(referralCode);
+    if (!referrerId || referrerId === userId) return { success: false, message: 'Invalid referral' };
 
-    const referrerDoc = snap.docs[0];
-    const referrerId = referrerDoc.id;
-    
-    if (referrerId === userId) return { success: false, message: 'Cannot refer yourself' };
-
-    // Update new user's referredBy
-    const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, { referredBy: referrerId });
-
-    // Reward direct referrer (Signup Bonus)
-    const settings = await getAppSettings();
-    if (settings.referralBonus > 0) {
-      await addEarnings(referrerId, 'Direct Referral Signup', settings.referralBonus, 'referral');
-    }
-
-    // Update referral counts
-    await updateDoc(doc(db, 'users', referrerId), { referralCountL1: increment(1) });
-    
-    const referrerData = referrerDoc.data() as UserProfile;
-    if (referrerData.referredBy) {
-      await updateDoc(doc(db, 'users', referrerData.referredBy), { referralCountL2: increment(1) });
+    // 1. Update referral counts (Level 1)
+    try {
+      await updateDoc(doc(db, 'users', referrerId), { referralCountL1: increment(1) });
       
-      const l2Referrer = await getDoc(doc(db, 'users', referrerData.referredBy));
-      if (l2Referrer.exists()) {
-        const l2Data = l2Referrer.data() as UserProfile;
-        if (l2Data.referredBy) {
-          await updateDoc(doc(db, 'users', l2Data.referredBy), { referralCountL3: increment(1) });
+      const referrerSnap = await getDoc(doc(db, 'users', referrerId));
+      if (referrerSnap.exists()) {
+        const referrerData = referrerSnap.data() as UserProfile;
+        if (referrerData.referredBy) {
+          await updateDoc(doc(db, 'users', referrerData.referredBy), { referralCountL2: increment(1) });
+          
+          const l2Referrer = await getDoc(doc(db, 'users', referrerData.referredBy));
+          if (l2Referrer.exists()) {
+            const l2Data = l2Referrer.data() as UserProfile;
+            if (l2Data.referredBy) {
+              await updateDoc(doc(db, 'users', l2Data.referredBy), { referralCountL3: increment(1) });
+            }
+          }
         }
       }
+    } catch (e) {
+      console.warn("Referral counts fail:", e);
+    }
+
+    // 2. Reward direct referrer (Signup Bonus)
+    try {
+      const settings = await getAppSettings();
+      if (settings.referralBonus > 0) {
+        await addEarnings(referrerId, 'Referral Signup Bonus', settings.referralBonus, 'referral', userId);
+      }
+    } catch (e) {
+      console.warn("Referral bonus fail:", e);
     }
 
     return { success: true };
   } catch (error) {
     console.error("Referral process error:", error);
-    return { success: false, message: 'System error processing referral' };
+    return { success: false, message: 'System error' };
   }
 }
 
 async function distributeMLMCommission(userId: string, pointsEarned: number) {
   try {
+    const numPointsEarned = Number(pointsEarned);
     const userSnap = await getDoc(doc(db, 'users', userId));
     if (!userSnap.exists()) return;
     const userData = userSnap.data() as UserProfile;
@@ -841,9 +971,9 @@ async function distributeMLMCommission(userId: string, pointsEarned: number) {
     
     // Level 1
     const l1Id = userData.referredBy;
-    const l1Comm = Math.floor(pointsEarned * (settings.mlmLevel1Percent / 100));
+    const l1Comm = Math.floor(numPointsEarned * (Number(settings.mlmLevel1Percent) / 100));
     if (l1Comm > 0) {
-      await addCommission(l1Id, `L1 Referral Earned: ${pointsEarned}`, l1Comm, userId);
+      await addCommission(l1Id, `L1 Referral Earned: ${numPointsEarned}`, l1Comm, userId);
     }
 
     // Level 2
@@ -852,9 +982,9 @@ async function distributeMLMCommission(userId: string, pointsEarned: number) {
       const l1Data = l1Snap.data() as UserProfile;
       if (l1Data.referredBy) {
         const l2Id = l1Data.referredBy;
-        const l2Comm = Math.floor(pointsEarned * (settings.mlmLevel2Percent / 100));
+        const l2Comm = Math.floor(numPointsEarned * (Number(settings.mlmLevel2Percent) / 100));
         if (l2Comm > 0) {
-          await addCommission(l2Id, `L2 Referral Earned: ${pointsEarned}`, l2Comm, userId);
+          await addCommission(l2Id, `L2 Referral Earned: ${numPointsEarned}`, l2Comm, userId);
         }
 
         // Level 3
@@ -863,9 +993,9 @@ async function distributeMLMCommission(userId: string, pointsEarned: number) {
           const l2Data = l2Snap.data() as UserProfile;
           if (l2Data.referredBy) {
             const l3Id = l2Data.referredBy;
-            const l3Comm = Math.floor(pointsEarned * (settings.mlmLevel3Percent / 100));
+            const l3Comm = Math.floor(numPointsEarned * (Number(settings.mlmLevel3Percent) / 100));
             if (l3Comm > 0) {
-              await addCommission(l3Id, `L3 Referral Earned: ${pointsEarned}`, l3Comm, userId);
+              await addCommission(l3Id, `L3 Referral Earned: ${numPointsEarned}`, l3Comm, userId);
             }
           }
         }
@@ -878,10 +1008,11 @@ async function distributeMLMCommission(userId: string, pointsEarned: number) {
 
 async function addCommission(referrerId: string, taskName: string, points: number, sourceUserId: string) {
   try {
+    const numPoints = Number(points);
     const earning: EarningLog = {
       userId: referrerId,
       taskName, // Simplified task name
-      points,
+      points: numPoints,
       timestamp: new Date().toISOString(),
       type: 'referral',
       sourceUserId
@@ -891,9 +1022,9 @@ async function addCommission(referrerId: string, taskName: string, points: numbe
     
     const userRef = doc(db, 'users', referrerId);
     await updateDoc(userRef, {
-      points: increment(points),
-      totalEarnings: increment(points),
-      referralEarnings: increment(points)
+      points: increment(numPoints),
+      totalEarnings: increment(numPoints),
+      referralEarnings: increment(numPoints)
     });
   } catch (e) {
     console.error("Add Commission Error:", e);

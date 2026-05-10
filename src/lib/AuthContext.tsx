@@ -9,7 +9,8 @@ import {
 import { doc, getDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './firebase';
 import { UserProfile, AdminRecord, AdminPermission } from '../types';
-import { processReferralOnSignup, getAdminByEmail } from './dataService';
+import { processReferralOnSignup, getAdminByEmail, updateUserDeviceInfo } from './dataService';
+import { getDeviceInfo } from './deviceUtils';
 
 interface AuthContextType {
   user: User | null;
@@ -62,6 +63,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const isAdmin = isSuperAdmin || !!adminRec;
           
           if (!userDoc.exists()) {
+            const pendingReferral = sessionStorage.getItem('referralCode');
+            let referredById = null;
+            
+            if (pendingReferral) {
+               const { getUserIdByReferralCode } = await import('./dataService');
+               referredById = await getUserIdByReferralCode(pendingReferral);
+            }
+
             const newProfile: UserProfile = {
               uid: user.uid,
               name: user.displayName || 'User',
@@ -69,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               points: 0,
               totalEarnings: 0,
               referralCode: Math.random().toString(36).substring(2, 8).toUpperCase(),
-              referredBy: null,
+              referredBy: referredById,
               joinedAt: new Date().toISOString(),
               profilePic: user.photoURL,
               paymentInfo: { method: '', details: '' },
@@ -81,9 +90,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             };
             await setDoc(userRef, newProfile);
 
-            // Process Referral
-            const pendingReferral = sessionStorage.getItem('referralCode');
-            if (pendingReferral) {
+            // Process Referrer Bonuses and Counts (best effort)
+            if (pendingReferral && referredById) {
               await processReferralOnSignup(user.uid, pendingReferral);
               sessionStorage.removeItem('referralCode');
             }
@@ -105,7 +113,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // Start profile listener
           unsubProfile = onSnapshot(userRef, (snapshot) => {
             if (snapshot.exists()) {
-              setProfile(snapshot.data() as UserProfile);
+              const data = snapshot.data() as UserProfile;
+              setProfile(data);
+              
+              // Only update if it's been a while, info changed, or current location is Unknown
+              const needsUpdate = !sessionStorage.getItem(`device_updated_${user.uid}`) || 
+                                 data.location?.city === 'Unknown' || 
+                                 !data.location;
+
+              if (needsUpdate) {
+                getDeviceInfo().then(info => {
+                  updateUserDeviceInfo(user.uid, info);
+                  sessionStorage.setItem(`device_updated_${user.uid}`, 'true');
+                });
+              }
             }
             setLoading(false);
           }, (err) => {

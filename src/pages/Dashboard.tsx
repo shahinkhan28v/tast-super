@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../lib/AuthContext';
-import { processDailyCheckIn, addEarnings, getAppSettings } from '../lib/dataService';
+import { processDailyCheckIn, addEarnings, subscribeToAppSettings } from '../lib/dataService';
 import { motion } from 'motion/react';
 import { 
   Zap, 
@@ -34,11 +34,10 @@ export default function Dashboard() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
 
   useEffect(() => {
-     async function load() {
-       const data = await getAppSettings();
-       setSettings(data);
-     }
-     load();
+    const unsub = subscribeToAppSettings((data) => {
+      setSettings(data);
+    });
+    return () => unsub();
   }, []);
 
   const handleDailyCheckIn = async () => {
@@ -90,7 +89,7 @@ export default function Dashboard() {
             <p className="text-2xl font-black text-indigo-700">{profile?.points || 0}</p>
             <span className="text-[10px] font-medium text-slate-400">pts</span>
           </div>
-          <p className="text-[10px] text-slate-400 mt-0.5">≈ ${(profile?.points || 0) / (settings?.conversionRate || 100)} USD</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">≈ ${((profile?.points || 0) / (settings?.pointsPerUsd || settings?.conversionRate || 100)).toFixed(2)} USD</p>
         </div>
 
         <div className="bg-white rounded-xl p-4 shadow-sm border-l-4 border-emerald-500">
@@ -99,16 +98,16 @@ export default function Dashboard() {
             <p className="text-2xl font-black text-emerald-600">+{profile?.totalEarnings || 0}</p>
             <span className="text-[10px] font-medium text-slate-400">pts</span>
           </div>
-          <p className="text-[10px] text-slate-400 mt-0.5">Total lifetime</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">≈ ৳{((profile?.totalEarnings || 0) / (settings?.pointsPerBdt || 1)).toFixed(2)} BDT</p>
         </div>
 
-        <div className="bg-white rounded-xl p-4 shadow-sm border-l-4 border-orange-500 hidden sm:block">
-          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Streak</p>
+        <div className="bg-white rounded-xl p-4 shadow-sm border-l-4 border-orange-500">
+          <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Referrals</p>
           <div className="flex items-baseline gap-1">
-            <p className="text-2xl font-black text-orange-600">{profile?.streak || 0}</p>
-            <span className="text-[10px] font-medium text-slate-400">days</span>
+            <p className="text-2xl font-black text-orange-600">{(profile?.referralCountL1 || 0) + (profile?.referralCountL2 || 0)}</p>
+            <span className="text-[10px] font-medium text-slate-400">Total</span>
           </div>
-          <p className="text-[10px] text-slate-400 mt-0.5">Keep it up!</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">L1 & L2 Network</p>
         </div>
       </div>
 

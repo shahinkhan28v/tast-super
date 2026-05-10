@@ -11,11 +11,9 @@ import {
   TrendingUp,
   AlertCircle
 } from 'lucide-react';
-import { updateWithdrawalStatus, getAllUsers } from '../../lib/dataService';
+import { updateWithdrawalStatus, subscribeToAllUsers, subscribeToAllWithdrawals } from '../../lib/dataService';
 import { WithdrawalRequest, UserProfile } from '../../types';
 import { cn } from '../../lib/utils';
-import { collection, query, orderBy, onSnapshot } from 'firebase/firestore';
-import { db } from '../../lib/firebase';
 
 export default function AdminWithdrawals() {
   const [requests, setRequests] = useState<WithdrawalRequest[]>([]);
@@ -27,22 +25,19 @@ export default function AdminWithdrawals() {
   const [showRejectModal, setShowRejectModal] = useState<string | null>(null);
 
   useEffect(() => {
-    // Load users once
-    async function loadUsers() {
-      const uData = await getAllUsers();
-      if (uData) setUsers(uData);
-    }
-    loadUsers();
+    const unsubUsers = subscribeToAllUsers((uData) => {
+      setUsers(uData);
+    });
 
-    // Withdrawals real-time
-    const q = query(collection(db, 'withdrawals'), orderBy('timestamp', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as WithdrawalRequest));
+    const unsubWithdrawals = subscribeToAllWithdrawals((data) => {
       setRequests(data);
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubUsers();
+      unsubWithdrawals();
+    };
   }, []);
 
   const handleAction = async (id: string, status: 'approved' | 'rejected', reason?: string) => {
@@ -139,7 +134,7 @@ export default function AdminWithdrawals() {
                 <tr className="bg-slate-50/50 border-b border-slate-100 text-[10px] font-bold text-slate-400 uppercase tracking-widest">
                   <th className="px-6 py-4 font-bold">Withdrawal Item</th>
                   <th className="px-6 py-4 font-bold">Request Time</th>
-                  <th className="px-6 py-4 font-bold">Amount (USD)</th>
+                  <th className="px-6 py-4 font-bold">Payable Amount</th>
                   <th className="px-6 py-4 font-bold">Method & Details</th>
                   <th className="px-6 py-4 font-bold text-center">Actions</th>
                 </tr>
@@ -166,18 +161,22 @@ export default function AdminWithdrawals() {
                     </td>
                     <td className="px-6 py-4">
                        <div className="flex items-baseline gap-1">
-                          <span className="text-sm font-black text-rose-600">-${req.amount / 100}</span>
-                          <span className="text-[10px] font-bold text-slate-400">USD</span>
+                          <span className="text-sm font-black text-emerald-600">
+                             {req.currency === 'BDT' ? '৳' : '$'}{req.amount.toLocaleString()}
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-400 uppercase">{req.currency}</span>
                        </div>
-                       <p className="text-[10px] text-slate-400 font-medium">({req.amount.toLocaleString()} points)</p>
+                       <p className="text-[10px] text-slate-400 font-medium whitespace-nowrap">Spent: {req.points?.toLocaleString() || (req.amount * 100).toLocaleString()} pts</p>
                     </td>
                     <td className="px-6 py-4">
-                       <div className="bg-slate-50 border border-slate-200 rounded-lg p-2 flex items-center justify-between min-w-[160px]">
-                          <div>
-                             <p className="text-[9px] font-black text-indigo-600 uppercase tracking-tight leading-none">{req.method}</p>
-                             <p className="text-[11px] font-bold text-slate-700 mt-1">{req.details}</p>
+                       <div className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 flex items-center justify-between min-w-[200px]">
+                          <div className="max-w-[220px]">
+                             <div className="flex items-center gap-1.5 mb-1">
+                                <span className="text-[9px] font-black text-indigo-600 uppercase tracking-tight leading-none bg-indigo-50 px-1.5 py-0.5 rounded">{req.method}</span>
+                             </div>
+                             <p className="text-[11px] font-bold text-slate-700 leading-normal break-words">{req.details}</p>
                           </div>
-                          <ExternalLink className="w-3 h-3 text-slate-300" />
+                          <ExternalLink className="w-3 h-3 text-slate-300 shrink-0" />
                        </div>
                     </td>
                     <td className="px-6 py-4">

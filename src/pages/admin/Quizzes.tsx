@@ -12,7 +12,7 @@ import {
   ChevronLeft,
   Layout
 } from 'lucide-react';
-import { getAllQuizzes, addQuiz, updateQuiz, deleteQuiz } from '../../lib/dataService';
+import { subscribeToAllQuizzes, addQuiz, updateQuiz, deleteQuiz } from '../../lib/dataService';
 import { Quiz, QuizQuestion } from '../../types';
 import { cn } from '../../lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -24,26 +24,21 @@ export default function AdminQuizzes() {
   const [editingQuiz, setEditingQuiz] = useState<Quiz | null>(null);
 
   useEffect(() => {
-    loadQuizzes();
+    const unsub = subscribeToAllQuizzes((data) => {
+      setQuizzes(data);
+      setLoading(false);
+    });
+    return () => unsub();
   }, []);
-
-  async function loadQuizzes() {
-    setLoading(true);
-    const data = await getAllQuizzes();
-    if (data) setQuizzes(data);
-    setLoading(false);
-  }
 
   const handleDelete = async (id: string) => {
     if (confirm('Delete this quiz? All user attempts will remain but references might break.')) {
       await deleteQuiz(id);
-      loadQuizzes();
     }
   };
 
   const handleToggleActive = async (quiz: Quiz) => {
     await updateQuiz(quiz.id!, { isActive: !quiz.isActive });
-    loadQuizzes();
   };
 
   return (
@@ -145,7 +140,7 @@ export default function AdminQuizzes() {
         {showAddModal && (
           <QuizFormModal 
             onClose={() => setShowAddModal(false)}
-            onSave={() => loadQuizzes()}
+            onSave={() => {}}
             quiz={editingQuiz}
           />
         )}

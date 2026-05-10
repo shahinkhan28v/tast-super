@@ -12,23 +12,24 @@ import {
   ChevronLeft,
   ChevronRight
 } from 'lucide-react';
-import { getAllUsers, updateUserAdminStatus } from '../../lib/dataService';
+import { subscribeToAllUsers, updateUserAdminStatus } from '../../lib/dataService';
 import { UserProfile } from '../../types';
 import { cn } from '../../lib/utils';
+import { useSearchParams } from 'react-router-dom';
 
 export default function AdminUsers() {
+  const [searchParams] = useSearchParams();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState(searchParams.get('uid') || '');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'admin'>('all');
 
   useEffect(() => {
-    async function load() {
-      const data = await getAllUsers();
-      if (data) setUsers(data);
+    const unsub = subscribeToAllUsers((data) => {
+      setUsers(data);
       setLoading(false);
-    }
-    load();
+    });
+    return () => unsub();
   }, []);
 
   const filteredUsers = users.filter(u => {

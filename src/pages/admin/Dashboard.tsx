@@ -19,7 +19,7 @@ import {
   BarChart,
   Bar
 } from 'recharts';
-import { getAdminStats, getAllUsers, getAllWithdrawals } from '../../lib/dataService';
+import { subscribeToAllUsers, subscribeToAllWithdrawals, getAdminStats } from '../../lib/dataService';
 import { cn } from '../../lib/utils';
 
 export default function AdminDashboard() {
@@ -28,41 +28,62 @@ export default function AdminDashboard() {
   const [chartData, setChartData] = useState<any[]>([]);
 
   useEffect(() => {
-    async function loadData() {
+    let unsubUsers: (() => void) | null = null;
+    let unsubWithdrawals: (() => void) | null = null;
+
+    async function init() {
       try {
-        const [s, users, withdrawals] = await Promise.all([
-          getAdminStats(),
-          getAllUsers(),
-          getAllWithdrawals()
-        ]);
-        setStats(s);
+        const initialStats = await getAdminStats();
+        setStats(initialStats);
+        
+        let allUsers: any[] = [];
+        let allWithdrawals: any[] = [];
 
-        // Simple aggregation for charts (last 7 days)
-        const last7Days = Array.from({ length: 7 }, (_, i) => {
-          const d = new Date();
-          d.setDate(d.getDate() - i);
-          return d.toISOString().split('T')[0];
-        }).reverse();
+        const updateCharts = () => {
+          const last7Days = Array.from({ length: 7 }, (_, i) => {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            return d.toISOString().split('T')[0];
+          }).reverse();
 
-        const dailyData = last7Days.map(date => {
-          const joined = (users as any[])?.filter(u => u.joinedAt?.startsWith(date)).length || 0;
-          const withdrawn = (withdrawals as any[])?.filter(w => w.timestamp?.startsWith(date) && w.status === 'approved')
-            .reduce((acc, curr) => acc + curr.amount, 0) || 0;
-          return {
-            name: date.split('-').slice(1).join('/'),
-            users: joined,
-            withdrawals: withdrawn / 100 // Convert to USD for scale
-          };
+          const dailyData = last7Days.map(date => {
+            const joined = allUsers.filter(u => u.joinedAt?.startsWith(date)).length || 0;
+            const withdrawn = allWithdrawals.filter(w => w.timestamp?.startsWith(date) && w.status === 'approved')
+              .reduce((acc, curr) => acc + (curr.amount || 0), 0) || 0;
+            return {
+              name: date.split('-').slice(1).join('/'),
+              users: joined,
+              withdrawals: withdrawn
+            };
+          });
+          setChartData(dailyData);
+        };
+
+        unsubUsers = subscribeToAllUsers((users) => {
+          allUsers = users;
+          updateCharts();
+          setStats(prev => prev ? ({ ...prev, totalUsers: users.length }) : prev);
         });
-        setChartData(dailyData);
 
-      } catch (error) {
-        console.error(error);
-      } finally {
+        unsubWithdrawals = subscribeToAllWithdrawals((withdrawals) => {
+          allWithdrawals = withdrawals;
+          updateCharts();
+          const pending = withdrawals.filter(w => w.status === 'pending').length;
+          setStats(prev => prev ? ({ ...prev, pendingWithdrawals: pending }) : prev);
+        });
+
         setLoading(false);
+      } catch (e) {
+        console.error(e);
       }
     }
-    loadData();
+
+    init();
+
+    return () => {
+      if (unsubUsers) unsubUsers();
+      if (unsubWithdrawals) unsubWithdrawals();
+    };
   }, []);
 
   if (loading) return <div>Loading...</div>;

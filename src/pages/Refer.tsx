@@ -93,8 +93,8 @@ export default function Refer() {
 
       {/* MLM Stats Overview */}
       <div className="grid grid-cols-3 gap-3">
-        {mlmLevels.map((lvl, i) => (
-          <div key={i} className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center gap-2">
+        {mlmLevels.map((lvl, index) => (
+          <div key={index} className="bg-white p-4 rounded-3xl border border-slate-100 shadow-sm flex flex-col items-center gap-2">
              <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-black/5", lvl.color)}>
                 <Users className="w-5 h-5" />
              </div>
@@ -104,6 +104,23 @@ export default function Refer() {
              </div>
           </div>
         ))}
+      </div>
+
+      {/* Network Stats Card */}
+      <div className="bg-indigo-600 rounded-[2.5rem] p-6 text-white shadow-xl shadow-indigo-100 flex items-center justify-between">
+         <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center backdrop-blur-sm">
+               <Network className="w-6 h-6 text-white" />
+            </div>
+            <div>
+               <h3 className="text-lg font-black tracking-tight leading-none">Total Referrals</h3>
+               <p className="text-[10px] font-bold text-indigo-200 uppercase tracking-widest mt-1">Full Network Data</p>
+            </div>
+         </div>
+         <div className="text-right">
+            <p className="text-2xl font-black">{(profile?.referralCountL1 || 0) + (profile?.referralCountL2 || 0)}</p>
+            <p className="text-[8px] font-black text-indigo-300 uppercase tracking-widest leading-none">Members</p>
+         </div>
       </div>
 
       {/* Dedicated Referral Code Box */}
@@ -164,12 +181,12 @@ export default function Refer() {
         <div className="flex items-center justify-between px-2">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">
-              <Network className="w-4 h-4" />
+              <Users className="w-4 h-4" />
             </div>
-            <h3 className="font-black text-slate-800 tracking-tight">Your Network</h3>
+            <h3 className="font-black text-slate-800 tracking-tight">Total Referrals</h3>
           </div>
           <span className="text-[10px] font-black text-slate-400 border border-slate-200 px-2 py-1 rounded-md uppercase tracking-widest bg-white shadow-sm">
-            {profile?.referralCountL1 || 0} Members
+            {profile?.referralCountL1 || 0} Direct
           </span>
         </div>
 

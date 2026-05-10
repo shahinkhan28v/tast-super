@@ -23,14 +23,16 @@ import {
   Info,
   Gift,
   AlertCircle,
-  Search
+  Search,
+  MapPin
 } from 'lucide-react';
 import { cn } from '../lib/utils';
-import { updateUserDetails, getAppSettings } from '../lib/dataService';
+import { updateUserDetails, getAppSettings, updateUserDeviceInfo } from '../lib/dataService';
+import { getDeviceInfo } from '../lib/deviceUtils';
 import { AppSettings } from '../types';
 import { Link } from 'react-router-dom';
 
-type View = 'main' | 'notifications' | 'language' | 'password' | 'bank' | 'privacy' | 'help';
+type View = 'main' | 'notifications' | 'language' | 'password' | 'bank' | 'privacy' | 'help' | 'device_history';
 
 export default function Account() {
   const { profile, logout } = useAuth();
@@ -384,10 +386,17 @@ export default function Account() {
               </div>
               <div className="text-left">
                 <h4 className="font-bold text-slate-800 text-sm leading-tight">Device History</h4>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Logged in on 1 device</p>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                  {profile?.lastIp ? 'Connected' : 'Syncing...'}
+                </p>
               </div>
             </div>
-            <button className="text-[10px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-3 py-1.5 rounded-lg active:scale-95 transition-transform">Manage</button>
+            <button 
+              onClick={() => setView('device_history')}
+              className="text-[10px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50 px-3 py-1.5 rounded-lg active:scale-95 transition-transform"
+            >
+              Manage
+            </button>
          </div>
 
          <div className="bg-white p-6 rounded-2xl border border-slate-100 text-left">
@@ -460,6 +469,88 @@ export default function Account() {
     </motion.div>
   );
 
+  const renderDeviceHistory = () => (
+    <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
+      {renderHeader('Device History')}
+      <div className="space-y-4">
+         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm relative overflow-hidden text-left">
+            <div className="flex items-center gap-4 relative z-10">
+               <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <Smartphone className="w-7 h-7" />
+               </div>
+               <div>
+                  <h3 className="text-lg font-black text-slate-800 tracking-tight">Active Connection</h3>
+                  <p className="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">This device is active</p>
+               </div>
+            </div>
+            <div className="mt-6 space-y-4 relative z-10">
+               <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Device Model</span>
+                  <span className="text-sm font-black text-slate-700">{profile?.deviceInfo?.os?.includes('Windows') ? 'Desktop PC' : profile?.deviceInfo?.isMobile ? 'Mobile Device' : 'Tablet/PC'}</span>
+               </div>
+               <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">OS / Platform</span>
+                  <span className="text-sm font-black text-slate-700">{profile?.deviceInfo?.os || 'Unknown'}</span>
+               </div>
+               <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Browser</span>
+                  <span className="text-sm font-black text-slate-700">{profile?.deviceInfo?.browser || 'Unknown'}</span>
+               </div>
+               <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Location</span>
+                  <div className="flex flex-col items-end gap-1">
+                     <div className="flex items-center gap-2">
+                        <MapPin className="w-3 h-3 text-indigo-500" />
+                        <span className="text-sm font-black text-slate-700">
+                           {profile?.location?.city || 'Unknown'}, {profile?.location?.country || 'Unknown'}
+                        </span>
+                     </div>
+                     {profile?.location?.region && profile?.location?.region !== 'Unknown' && (
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">
+                           Region: {profile.location.region}
+                        </span>
+                     )}
+                  </div>
+               </div>
+               <div className="flex justify-between items-center py-3">
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">IP Address</span>
+                  <div className="flex items-center gap-2">
+                     <Globe className="w-3 h-3 text-emerald-500" />
+                     <span className="text-sm font-black text-slate-700">{profile?.lastIp || 'Detecting...'}</span>
+                  </div>
+               </div>
+            </div>
+            
+            <div className="mt-8 flex flex-col gap-4">
+               <button 
+                  onClick={async () => {
+                     const info = await getDeviceInfo();
+                     if (profile?.uid) {
+                        updateUserDeviceInfo(profile.uid, info);
+                     }
+                  }}
+                  className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black text-xs uppercase tracking-widest shadow-lg shadow-indigo-100 active:scale-95 transition-all"
+               >
+                  Refresh Live Location
+               </button>
+               
+               <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100 flex gap-3">
+                  <AlertCircle className="w-5 h-5 text-orange-500 shrink-0" />
+                  <p className="text-[10px] font-medium text-orange-700 leading-relaxed">
+                     Note: Log out from all other devices regularly to keep your account safe. If you see an IP or Location you don't recognize, change your password immediately.
+                  </p>
+               </div>
+            </div>
+         </div>
+
+         <div className="bg-slate-50 p-6 rounded-3xl border border-slate-200 text-center space-y-2">
+            <Info className="w-5 h-5 text-slate-400 mx-auto" />
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Session ID: {profile?.uid?.substring(0, 10).toUpperCase()}</p>
+         </div>
+      </div>
+    </motion.div>
+  );
+
   return (
     <div className="pb-10">
       <AnimatePresence mode="wait">
@@ -471,6 +562,7 @@ export default function Account() {
           {view === 'password' && renderPassword()}
           {view === 'privacy' && renderPrivacy()}
           {view === 'help' && renderHelp()}
+          {view === 'device_history' && renderDeviceHistory()}
         </div>
       </AnimatePresence>
     </div>

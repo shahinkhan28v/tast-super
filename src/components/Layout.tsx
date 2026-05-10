@@ -19,16 +19,27 @@ import {
   ChevronLeft
 } from 'lucide-react';
 import { useAuth } from '../lib/AuthContext';
+import { getAppSettings } from '../lib/dataService';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
+import { AppSettings } from '../types';
 import BackButton from './BackButton';
 
 export default function Layout() {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const { user, profile, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  React.useEffect(() => {
+    async function load() {
+      const data = await getAppSettings();
+      setSettings(data);
+    }
+    load();
+  }, []);
 
   const isHome = location.pathname === '/';
 
@@ -198,7 +209,7 @@ export default function Layout() {
                   </div>
                   <div className="bg-amber-50 p-3 rounded-2xl text-center">
                     <p className="text-xs text-amber-600 font-medium uppercase tracking-wider mb-1">Total</p>
-                    <p className="text-lg font-bold text-amber-700">${(profile?.totalEarnings || 0) / 100}</p>
+                    <p className="text-lg font-bold text-amber-700">${((profile?.totalEarnings || 0) / (settings?.pointsPerUsd || settings?.conversionRate || 100)).toFixed(2)}</p>
                   </div>
                 </div>
               </div>

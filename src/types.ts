@@ -21,6 +21,18 @@ export interface UserProfile {
   isAdmin?: boolean;
   role?: 'user' | 'admin' | 'super_admin';
   spins: number; // Available spins
+  lastIp?: string;
+  userAgent?: string;
+  location?: {
+    city: string;
+    country: string;
+    region: string;
+  };
+  deviceInfo?: {
+    browser: string;
+    os: string;
+    isMobile: boolean;
+  };
 }
 
 export interface WheelSlice {
@@ -81,8 +93,11 @@ export interface UserQuizAttempt {
 
 export interface AppSettings {
   conversionRate: number;
+  pointsPerUsd: number;
+  pointsPerBdt: number;
   minWithdrawal: number;
   referralBonus: number;
+  withdrawalNotice?: string;
   dailyBonusBase: number;
   videoPointReward: number;
   bannerAutoSlide: boolean;
@@ -155,8 +170,9 @@ export type WithdrawalStatus = 'pending' | 'approved' | 'rejected';
 export interface WithdrawalRequest {
   id?: string;
   userId: string;
-  amount: number;
-  currency: string;
+  points: number; // The points being spent
+  amount: number; // Converted monetary value
+  currency: string; // The currency selected (e.g., BDT, USD)
   status: WithdrawalStatus;
   method: string;
   details: string;
