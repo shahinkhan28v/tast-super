@@ -46,7 +46,7 @@ export default function AdminAdmins() {
     permissions: [] as AdminPermission[]
   });
 
-  const isSuperAdmin = profile?.role === 'super_admin' || profile?.email === 'shahinkhan28r@gmail.com';
+  const isSuperAdmin = profile?.role === 'super_admin' || profile?.email === 'shahinkhan28v@gmail.com';
 
   useEffect(() => {
     loadAdmins();

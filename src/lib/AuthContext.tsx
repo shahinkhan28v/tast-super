@@ -93,10 +93,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const currentData = userDoc.data() as UserProfile;
             const targetRole = isSuperAdmin ? 'super_admin' : (adminRec ? 'admin' : 'user');
             
-            if ((isAdmin && !currentData.isAdmin) || currentData.role !== targetRole) {
+            if ((isAdmin !== currentData.isAdmin) || currentData.role !== targetRole) {
                const { updateDoc } = await import('firebase/firestore');
                await updateDoc(userRef, { 
-                 isAdmin: true, 
+                 isAdmin: isAdmin, 
                  role: targetRole
                });
             }

@@ -16,20 +16,21 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      // Hardcoded super admin + admins collection lookup
+      // Hardcoded super admin + admins collection lookup by email
       return isSignedIn() && (
-        request.auth.token.email == 'shahinkhan28v@gmail.com' ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        request.auth.token.email.lower() == 'shahinkhan28v@gmail.com' ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.token.email.lower()))
       );
     }
     
     function hasPermission(perm) {
+      let email = request.auth.token.email.lower();
       return isSignedIn() && (
-        request.auth.token.email == 'shahinkhan28v@gmail.com' ||
-        (exists(/databases/$(database)/documents/admins/$(request.auth.uid)) && (
-          get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'super_admin' ||
-          (get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.permissions != null && 
-           get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.permissions.hasAny([perm]))
+        email == 'shahinkhan28v@gmail.com' ||
+        (exists(/databases/$(database)/documents/admins/$(email)) && (
+          get(/databases/$(database)/documents/admins/$(email)).data.role == 'super_admin' ||
+          (get(/databases/$(database)/documents/admins/$(email)).data.permissions != null && 
+           get(/databases/$(database)/documents/admins/$(email)).data.permissions.hasAny([perm]))
         ))
       );
     }
@@ -53,7 +54,7 @@ service cloud.firestore {
     // Admins Collection
     match /admins/{adminId} {
       allow read: if isSignedIn();
-      allow write: if request.auth.token.email == 'shahinkhan28v@gmail.com';
+      allow write: if hasPermission('manage_admins');
     }
 
     // Global Settings
